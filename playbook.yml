@@ -1,0 +1,87 @@
+---
+- hosts: localhost
+  gather_facts: no
+  tasks:
+    
+    - name: Check If Docker Is Installed
+      command: docker --version
+      register: docker_valid
+      ignore_errors: yes
+ 
+    - name: Debug Docker Output
+      debug:
+        var: docker_valid
+ 
+    - name: Install Docker pre-requisites
+      yum:
+        name: yum-utils
+        state: latest
+      when: docker_valid.failed
+
+    - name: Configure Yum
+      yum_repository:
+        name: "docker_repo"
+        description: Yum repo for docker
+        baseurl: https://download.docker.com/linux/centos/7/x86_64/stable/
+        gpgcheck: no
+      when: docker_valid.failed
+
+    - name: Install Docker
+      package:
+        name: "docker-ce-20.10.21-3.el7.x86_64"
+        state: present
+      when: docker_valid.failed
+    
+    - name: Install Python
+      package:
+        name: "python3"
+        state: present
+      when: docker_valid.failed
+    
+    - name: Install Docker sdk for python
+      pip:
+        name: docker
+      when: docker_valid.failed
+    
+    - name: Start Docker service
+      service:
+        name: "docker"
+        state: started
+      when: docker_valid.failed
+
+    - name: Check If Docker Is Installed Again
+      command: docker --version
+      register: docker_valid
+ 
+    - name: Debug Docker Output Again
+      debug:
+        var: docker_valid
+
+    - name: Run Task If Docker is Already Installed
+      debug:
+        msg: "Will run tasks since docker is installed."
+      when: not docker_valid.failed
+
+    - name: Obtain Access Permission
+      shell: chmod +x ./gradlew
+
+    - name: Build Source
+      shell : ./gradlew build
+
+    - name: Build Container Image
+      docker_image:
+        name: demo-container
+        source: build
+        build:
+          path: ./
+      when: not docker_valid.failed
+
+    - name: Start Docker Container
+      docker_container:
+        name: It is an assignment
+        recreate: true
+        state: started
+        image: demo-container
+        ports:
+          - "8080:8080"
+      when: not docker_valid.failed
